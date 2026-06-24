@@ -157,7 +157,12 @@ async def get_task(task_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{task_id}", response_model=TaskResponse)
 async def update_task(task_id: UUID, task_in: TaskUpdate, db: AsyncSession = Depends(get_db)):
-    task = await db.get(Task, task_id)
+    result = await db.execute(
+        select(Task)
+        .where(Task.id == task_id)
+        .options(selectinload(Task.dependencies))
+    )
+    task = result.scalar()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
         
