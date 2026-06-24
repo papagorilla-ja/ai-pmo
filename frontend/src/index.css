@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-primary: #080b11;
+  --bg-secondary: rgba(13, 17, 23, 0.7);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-blur: blur(16px);
+  --color-neon-blue: #00f2fe;
+  --color-neon-purple: #9b51e0;
+  --color-neon-pink: #ff007f;
+  --color-success: #00e676;
+  --color-warning: #ffb300;
+  --color-error: #ff1744;
+}
+
+body {
+  margin: 0;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-primary);
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(155, 81, 224, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(255, 0, 127, 0.01) 0%, transparent 60%);
+  background-attachment: fixed;
+  color: #e2e8f0;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: var(--glass-bg) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+.glass-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(0, 242, 254, 0.25) !important;
+  box-shadow: 0 12px 30px rgba(0, 242, 254, 0.08) !important;
+}
+
+.glass-input input {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+}
+
+.glass-input input:focus {
+  border-color: var(--color-neon-blue) !important;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.2) !important;
+}
+
+/* Neon Text & Backgrounds */
+.text-neon-blue {
+  color: var(--color-neon-blue);
+  text-shadow: 0 0 10px rgba(0, 242, 254, 0.3);
+}
+
+.text-neon-purple {
+  color: var(--color-neon-purple);
+  text-shadow: 0 0 10px rgba(155, 81, 224, 0.3);
+}
+
+.bg-neon-gradient {
+  background: linear-gradient(135deg, var(--color-neon-blue) 0%, var(--color-neon-purple) 100%) !important;
+}
+
+.border-neon-glow {
+  border: 1px solid rgba(0, 242, 254, 0.3) !important;
+  box-shadow: 0 0 15px rgba(0, 242, 254, 0.15) !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 254, 0.3);
+}
+
+/* Gantt Chart Overrides for Plan B Dotted Ghost */
+.gantt .bar-ghost {
+  fill: rgba(0, 242, 254, 0.05) !important;
+  stroke: var(--color-neon-blue) !important;
+  stroke-width: 1.5 !important;
+  stroke-dasharray: 4, 4 !important;
+  opacity: 0.65 !important;
+}
+
+.gantt .bar-ghost-label {
+  fill: #8f9cae !important;
+  font-size: 11px !important;
+  font-style: italic !important;
+}
+
+/* Custom transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}

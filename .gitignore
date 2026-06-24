@@ -1,0 +1,36 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# ===== Virtual environments =====
+venv/
+.venv/
+env/
+
+# ===== Logs =====
+*.log
+
+# ===== Environment / Secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== Artifacts (AI-generated subtask outputs) =====
+backend/artifacts/
+
+# ===== IDE / OS =====
+.DS_Store
+.idea/
+.vscode/
+!frontend/.vscode/extensions.json
+*.swp
+*.swo
+
+# ===== Claude Code local settings =====
+.claude/
+
+# ===== Frontend (also covered by frontend/.gitignore) =====
+frontend/node_modules/
+frontend/dist/

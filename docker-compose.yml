@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ai_pmo_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_pmo
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ai_pmo_qdrant
+    restart: always
+    ports:
+      - "6335:6333"
+      - "6336:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  gitea:
+    image: gitea/gitea:latest
+    container_name: ai_pmo_gitea
+    restart: always
+    environment:
+      USER_UID: 1000
+      USER_GID: 1000
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__ROOT_URL: http://localhost:3000/
+      GITEA__server__HTTP_PORT: 3000
+    ports:
+      - "3000:3000"
+      - "222:22"
+    volumes:
+      - giteadata:/data
+
+volumes:
+  pgdata:
+  qdrantdata:
+  giteadata:

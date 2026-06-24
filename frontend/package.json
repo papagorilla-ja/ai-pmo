@@ -1,0 +1,28 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@infectoone/vue-ganttastic": "^2.3.2",
+    "@mdi/font": "^7.4.47",
+    "@svar-ui/vue-gantt": "^2.7.0",
+    "axios": "^1.17.0",
+    "dayjs": "^1.11.21",
+    "jordium-gantt-vue3": "^1.11.6",
+    "pinia": "^3.0.4",
+    "sass": "^1.100.0",
+    "vue": "^3.5.34",
+    "vue-router": "^5.1.0",
+    "vuetify": "^4.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.6",
+    "vite": "^8.0.12"
+  }
+}
