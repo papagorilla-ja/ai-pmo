@@ -1,4 +1,6 @@
 import logging
+import re
+import json
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +10,7 @@ from uuid import UUID
 from app.models.project import Project
 from app.models.task import Task
 from app.models.resource_allocation import ResourceAllocation
+from app.services.llm import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,7 @@ class PortfolioService:
                                 "skill": needed_skill,
                                 "shift_percent": 20,
                                 "substitute_ai_name": "AI_WORKER_BACKFILL",
+                                "delay_info": f"{dt.delay_days}日遅延中",
                                 "description": (
                                     f"プロジェクト「{other_proj.name}」の進捗には現在余裕があるため、"
                                     f"同等スキルを持つ【{alloc.resource_name}】の稼働を 20% シフトし、"
@@ -73,6 +77,33 @@ class PortfolioService:
                                 )
                             })
                             
+        # LLM でより豊かな説明文を再生成（失敗時はテンプレート文を維持）
+        if proposals:
+            context_lines = [
+                f"- 案{i+1}: {p['delayed_project_name']}のタスク「{p['delayed_task_title']}」が{p['delay_info']}。"
+                f"{p['donor_project_name']}の{p['resource_name']}（{p['skill']}スキル）を{p['shift_percent']}%シフト提案。"
+                for i, p in enumerate(proposals)
+            ]
+            system_prompt = (
+                "あなたはPMOのリソース調停アナリストです。"
+                "以下のリソース競合・遅延状況を分析し、各調停案を経営層向けに端的な日本語で説明してください。"
+                "出力は JSON 配列のみ。各要素は提示された案の番号（1始まり）に対応させること。"
+                '形式: [{"index": 1, "description": "50字以内の説明文"}]'
+                "解説不要。JSONのみ出力。"
+            )
+            try:
+                raw = await llm_service.get_response(system_prompt, "\n".join(context_lines), temperature=0.3)
+                cleaned = re.sub(r'^```(?:json)?\s*', '', raw.strip(), flags=re.MULTILINE)
+                cleaned = re.sub(r'\s*```$', '', cleaned.strip(), flags=re.MULTILINE)
+                llm_results = json.loads(cleaned.strip())
+                for item in llm_results:
+                    idx = item.get("index", 0) - 1
+                    desc = item.get("description", "")
+                    if 0 <= idx < len(proposals) and desc:
+                        proposals[idx]["description"] = desc
+            except Exception as e:
+                logger.warning(f"LLM conflict description generation failed (using template): {e}")
+
         return proposals
 
     async def apply_allocation_shift(self, db: AsyncSession, delayed_project_id: str, donor_project_id: str, resource_name: str, shift_percent: int) -> bool:

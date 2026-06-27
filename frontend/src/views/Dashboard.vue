@@ -82,6 +82,46 @@
             </v-col>
           </v-row>
 
+          <!-- EVM JPY amounts row -->
+          <v-row class="mt-4" dense>
+            <v-col cols="4">
+              <div class="pa-3 bg-glass rounded-lg border-subtle text-center">
+                <div class="text-caption text-grey">PV (計画価値)</div>
+                <div class="text-body-2 font-weight-bold text-white">
+                  {{ store.executiveSummary?.total_pv_jpy != null
+                    ? '¥' + store.executiveSummary.total_pv_jpy.toLocaleString()
+                    : '---' }}
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="4">
+              <div class="pa-3 bg-glass rounded-lg border-subtle text-center">
+                <div class="text-caption text-grey">EV (出来高)</div>
+                <div
+                  class="text-body-2 font-weight-bold"
+                  :class="(store.executiveSummary?.total_ev_jpy ?? 0) >= (store.executiveSummary?.total_pv_jpy ?? 0) ? 'text-success' : 'text-error'"
+                >
+                  {{ store.executiveSummary?.total_ev_jpy != null
+                    ? '¥' + store.executiveSummary.total_ev_jpy.toLocaleString()
+                    : '---' }}
+                </div>
+              </div>
+            </v-col>
+            <v-col cols="4">
+              <div class="pa-3 bg-glass rounded-lg border-subtle text-center">
+                <div class="text-caption text-grey">AC (実績コスト)</div>
+                <div
+                  class="text-body-2 font-weight-bold"
+                  :class="(store.executiveSummary?.total_ac_jpy ?? 0) <= (store.executiveSummary?.total_ev_jpy ?? 0) ? 'text-success' : 'text-error'"
+                >
+                  {{ store.executiveSummary?.total_ac_jpy != null
+                    ? '¥' + store.executiveSummary.total_ac_jpy.toLocaleString()
+                    : '---' }}
+                </div>
+              </div>
+            </v-col>
+          </v-row>
+
           <div class="mt-6 text-caption text-grey">
             ※ SPI/CPIは、プロジェクト全体のWBSタスクの進捗、重みづけ優先度、および実際発生したコストの集計値からリアルタイムに算出されています。
           </div>
@@ -103,6 +143,59 @@
           <div v-else class="text-body-2 text-white white-space-pre-wrap report-box pa-4 rounded-lg bg-glass border-subtle">
             {{ store.executiveSummary?.summary_report }}
           </div>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <!-- Executive View: project breakdown table -->
+    <v-row v-if="isExecutiveView && store.executiveSummary?.project_breakdown?.length" class="mb-4">
+      <v-col cols="12">
+        <v-card class="glass-card pa-4">
+          <v-card-title class="text-subtitle-2 font-weight-bold text-neon-blue pb-2 d-flex align-center">
+            <v-icon start color="primary" size="18">mdi-table-eye</v-icon>
+            プロジェクト別 EVM 内訳
+          </v-card-title>
+          <v-table density="compact" class="bg-transparent">
+            <thead>
+              <tr>
+                <th class="text-caption text-grey">プロジェクト</th>
+                <th class="text-caption text-grey text-right">SPI</th>
+                <th class="text-caption text-grey text-right">CPI</th>
+                <th class="text-caption text-grey text-right">PV (円)</th>
+                <th class="text-caption text-grey text-right">EV (円)</th>
+                <th class="text-caption text-grey text-right">AC (円)</th>
+                <th class="text-caption text-grey text-right">遅延タスク</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in store.executiveSummary.project_breakdown" :key="p.project">
+                <td class="text-body-2 text-white">{{ p.project }}</td>
+                <td
+                  class="text-body-2 text-right font-weight-bold"
+                  :class="p.spi >= 1.0 ? 'text-success' : 'text-error'"
+                >{{ p.spi }}</td>
+                <td
+                  class="text-body-2 text-right font-weight-bold"
+                  :class="p.cpi >= 1.0 ? 'text-success' : 'text-error'"
+                >{{ p.cpi }}</td>
+                <td class="text-body-2 text-grey text-right">¥{{ p.pv_jpy.toLocaleString() }}</td>
+                <td class="text-body-2 text-white text-right">¥{{ p.ev_jpy.toLocaleString() }}</td>
+                <td
+                  class="text-body-2 text-right"
+                  :class="p.ac_jpy > p.ev_jpy ? 'text-error' : 'text-success'"
+                >¥{{ p.ac_jpy.toLocaleString() }}</td>
+                <td class="text-body-2 text-right">
+                  <v-chip
+                    v-if="p.delayed_task_count > 0"
+                    color="error"
+                    size="x-small"
+                    label
+                  >{{ p.delayed_task_count }}件</v-chip>
+                  <span v-else class="text-success text-caption">なし</span>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
         </v-card>
       </v-col>
     </v-row>

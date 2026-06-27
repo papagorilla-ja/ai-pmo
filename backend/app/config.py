@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     # Vector DB Settings
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6335")
     QDRANT_COLLECTION_NAME: str = "ai_pmo_knowledge"
+    QDRANT_LESSONS_COLLECTION_NAME: str = "lessons_learned"
+    QDRANT_GOVERNANCE_COLLECTION_NAME: str = "governance_rules"
     
     # LLM Settings (LM Studio)
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:1234/v1")

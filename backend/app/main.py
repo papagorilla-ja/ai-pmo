@@ -1,3 +1,4 @@
+import uuid
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
@@ -7,6 +8,204 @@ from app.config import settings
 from app.api.router import api_router
 from app.core.exceptions import setup_exception_handlers
 from app.database import engine, Base
+
+_SEED_GOVERNANCE_RULES = [
+    {
+        "title": "認証情報の平文記述禁止",
+        "content": (
+            "社内セキュリティ規約 第3条: APIキー、データベース接続文字列、パスワード、JWTシークレットを"
+            "ソースコード内に平文でハードコードしてはならない。"
+            "すべての認証情報は環境変数（.env）またはシークレット管理サービスから取得すること。"
+            "違反例: SECRET_KEY = 'hardcoded_secret'、DB_URL = 'postgresql://user:pass@localhost'"
+        ),
+        "category": "security",
+        "severity": "CRITICAL"
+    },
+    {
+        "title": "PostgreSQL接続プール必須",
+        "content": (
+            "コーディング標準 第5条: 本番環境のデータベース接続は必ず asyncpg + SQLAlchemy のコネクションプールを使用すること。"
+            "pool_size=5、max_overflow=10 を基準とし、接続数制限（PostgreSQL の max_connections）に配慮すること。"
+            "直接 psycopg2 を同期的に使用することを禁止する。"
+        ),
+        "category": "coding_standard",
+        "severity": "HIGH"
+    },
+    {
+        "title": "本番環境ログ記録の義務化",
+        "content": (
+            "運用規約 第8条: 本番環境では INFO レベル以上のログを必ず出力すること。"
+            "例外発生時は logger.error() でスタックトレースを記録すること。"
+            "print() によるデバッグ出力を本番コードに残してはならない。"
+            "機密情報（パスワード、トークン）をログに出力することを禁止する。"
+        ),
+        "category": "operational",
+        "severity": "HIGH"
+    },
+    {
+        "title": "SQLインジェクション対策：パラメータ化クエリの必須使用",
+        "content": (
+            "セキュリティ規約 第7条: データベースクエリでは必ず ORM（SQLAlchemy）または"
+            "パラメータ化クエリを使用すること。"
+            "ユーザー入力を f-string や文字列結合でクエリに組み込むことを禁止する。"
+            "違反例: query = f\"SELECT * FROM users WHERE name = '{user_input}'\""
+        ),
+        "category": "security",
+        "severity": "CRITICAL"
+    },
+    {
+        "title": "APIエンドポイントへの認証必須",
+        "content": (
+            "セキュリティ規約 第4条: すべての APIエンドポイント（GET含む）は"
+            "`Depends(get_current_user)` を使用した JWT 認証を付与すること。"
+            "認証が不要なエンドポイントは `/api/v1/auth/` 配下のみ許可。"
+            "認証なし公開エンドポイントを追加する場合はセキュリティレビューを要する。"
+        ),
+        "category": "security",
+        "severity": "HIGH"
+    },
+    {
+        "title": "CORSの適切な設定（全オリジン許可の禁止）",
+        "content": (
+            "セキュリティ規約 第6条: CORS の `allow_origins` に `[\"*\"]` を指定することを禁止する。"
+            "許可するオリジンは明示的にリストアップし、環境変数で管理すること。"
+            "本番環境では `allow_credentials=True` と `allow_origins=[\"*\"]` の組み合わせは"
+            "CORS仕様上エラーとなるため特に注意すること。"
+        ),
+        "category": "security",
+        "severity": "HIGH"
+    },
+    {
+        "title": "個人情報・機密データの暗号化義務",
+        "content": (
+            "情報セキュリティポリシー 第12条: メールアドレス、氏名、電話番号などの個人情報は"
+            "保存時にハッシュ化または暗号化すること。"
+            "パスワードは bcrypt または argon2 によるハッシュを必須とする。"
+            "平文パスワードをデータベースに保存することを厳禁とする。"
+        ),
+        "category": "security",
+        "severity": "CRITICAL"
+    },
+    {
+        "title": "エラーハンドリング必須（詳細エラーの外部露出禁止）",
+        "content": (
+            "コーディング標準 第9条: 本番環境の API は 500 エラー時にスタックトレースや"
+            "内部実装の詳細をレスポンスに含めてはならない。"
+            "FastAPI では `HTTPException` を使用し、ユーザー向けメッセージのみを返すこと。"
+            "未処理の例外は setup_exception_handlers で一括捕捉し、ログに記録すること。"
+        ),
+        "category": "coding_standard",
+        "severity": "HIGH"
+    },
+    {
+        "title": "DBマイグレーション前バックアップ義務",
+        "content": (
+            "運用規約 第15条: 本番データベースへの Alembic マイグレーション実行前に"
+            "必ずフルバックアップ（pg_dump）を取得すること。"
+            "マイグレーションスクリプトはステージング環境で本番相当データ量を使用して"
+            "リハーサルを行ってから本番適用すること。"
+            "ダウンタイムが発生する ALTER TABLE はメンテナンスウィンドウ内で実施すること。"
+        ),
+        "category": "operational",
+        "severity": "HIGH"
+    },
+    {
+        "title": "本番デプロイ前のコードレビュー必須",
+        "content": (
+            "開発プロセス規約 第2条: main/master ブランチへのマージには"
+            "必ず1名以上のピアレビュー承認を必要とする。"
+            "セキュリティに影響するコード変更（認証、暗号化、外部API連携）は"
+            "PMO セキュリティチームのレビューを追加で必要とする。"
+            "CI/CD パイプラインのテストが全て PASS していることをマージ条件とする。"
+        ),
+        "category": "process",
+        "severity": "MEDIUM"
+    },
+]
+
+async def _seed_governance_rules():
+    from app.services.rag import rag_service
+    col = settings.QDRANT_GOVERNANCE_COLLECTION_NAME
+    if rag_service.count_documents(col) > 0:
+        logger.info(f"Governance Rules collection '{col}' already seeded. Skipping.")
+        return
+    documents = [f"{r['title']}\n{r['content']}" for r in _SEED_GOVERNANCE_RULES]
+    metadatas = [
+        {
+            "type": "governance_rule",
+            "title": r["title"],
+            "category": r["category"],
+            "severity": r["severity"],
+            "source": "seed"
+        }
+        for r in _SEED_GOVERNANCE_RULES
+    ]
+    ids = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"gov_rule_{r['title']}")) for r in _SEED_GOVERNANCE_RULES]
+    registered = await rag_service.add_documents(documents, metadatas, ids, col)
+    logger.info(f"Seeded {len(registered)} governance rules into '{col}' collection.")
+
+_SEED_LESSONS = [
+    {
+        "title": "外部決済API接続トラブル",
+        "content": "外部決済API連携時にテスト用サンドボックスの発行申請に2週間要し、WBS全体が遅延した教訓。事前にベンダーへのテストアカウント申請手続きを計画に組み込むこと。",
+        "mitigation_task": "決済プロバイダーへのテストアカウント申請・事前審査手続き"
+    },
+    {
+        "title": "フロントエンド・ブラウザ互換性の罠",
+        "content": "Vuetify 3 の一部コンポーネントが古いSafariで描画エラーになり、UI調整工数が発生した。CIでのクロスブラウザテスト自動化が予防に有効。",
+        "mitigation_task": "クロスブラウザテスト環境の準備とCI自動チェックの設定"
+    },
+    {
+        "title": "DBマイグレーション本番失敗",
+        "content": "Alembic auto-generateで生成したスキーマをStagingのみでテストし、本番の大容量テーブルでTIMEOUTが発生した教訓。本番相当データ量でのリハーサルが必要。",
+        "mitigation_task": "本番相当データ量でのマイグレーションリハーサル実施"
+    },
+    {
+        "title": "認証情報のハードコーディング漏洩",
+        "content": "開発段階でAPIキーをコードに直書きし、誤ってGitにプッシュして漏洩したインシデント。環境変数管理と.gitignoreの徹底が必要。",
+        "mitigation_task": "シークレットスキャンCI導入と環境変数への移行"
+    },
+    {
+        "title": "非同期処理でのMissingGreenletエラー",
+        "content": "async/await環境でSQLAlchemyの遅延ロード(lazy='select')を使用し、greenletエラーによりサーバーが500を返した教訓。selectinloadによる事前ロードを徹底すること。",
+        "mitigation_task": "asyncio互換性チェックリストの整備とselectinload適用確認"
+    },
+    {
+        "title": "要件定義の曖昧さによる手戻り",
+        "content": "UI仕様が未確定のままAPIを実装し、後から大幅な設計変更が発生した。Plan-Firstアプローチで実装前にUI/APIインタフェースを固めることで回避可能。",
+        "mitigation_task": "実装着手前のUI/APIインタフェース設計レビュー実施"
+    },
+    {
+        "title": "Docker環境と本番環境の差異",
+        "content": "ローカルのDocker ComposeとクラウドOSバージョンが異なり動作差異が発生した。CI/CDパイプラインを本番同一のイメージで実行することで防止できる。",
+        "mitigation_task": "本番同一DockerイメージでのCIパイプライン整備"
+    },
+    {
+        "title": "外部ライブラリの突然の破壊的変更",
+        "content": "外部ライブラリのメジャーアップデートにより互換性が破壊され、リリース前の急ぎ対応が発生した。依存バージョン固定と定期的な更新計画が有効。",
+        "mitigation_task": "package-lock固定とdependabotによる定期更新の仕組み整備"
+    },
+    {
+        "title": "テスト環境と本番環境の接続先誤設定",
+        "content": "テスト環境のDBURLが誤って本番を向いており、テストデータが本番に流入したインシデント。環境変数のバリデーションと環境ごとのCI分離が必要。",
+        "mitigation_task": "環境変数バリデーションとCI環境分離の設定"
+    },
+]
+
+async def _seed_lessons_learned():
+    from app.services.rag import rag_service
+    col = settings.QDRANT_LESSONS_COLLECTION_NAME
+    if rag_service.count_documents(col) > 0:
+        logger.info(f"Lessons Learned collection '{col}' already seeded. Skipping.")
+        return
+    documents = [f"{l['title']}\n{l['content']}" for l in _SEED_LESSONS]
+    metadatas = [
+        {"type": "lesson_seed", "title": l["title"], "mitigation_task": l["mitigation_task"], "source": "seed"}
+        for l in _SEED_LESSONS
+    ]
+    ids = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"lesson_seed_{l['title']}")) for l in _SEED_LESSONS]
+    registered = await rag_service.add_documents(documents, metadatas, ids, col)
+    logger.info(f"Seeded {len(registered)} lessons into '{col}' collection.")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -322,8 +521,14 @@ async def lifespan(app: FastAPI):
             
             await db.commit()
             logger.info("Demo database seeding finished successfully.")
-            
+
     logger.info("Database initialized successfully.")
+
+    # Seed Lessons Learned Qdrant collection
+    await _seed_lessons_learned()
+    # Seed Governance Rules Qdrant collection
+    await _seed_governance_rules()
+
     yield
 
 app = FastAPI(

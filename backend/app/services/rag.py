@@ -20,38 +20,38 @@ class RAGService:
             logger.error(f"Failed to initialize Qdrant: {str(e)}. RAG queries will run in mocked mode.")
             self.client = None
 
-    async def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: Optional[List[str]] = None) -> List[str]:
+    async def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: Optional[List[str]] = None, collection_name: Optional[str] = None) -> List[str]:
         if not self.client:
             logger.warning("Qdrant client not initialized. Skipping document indexing.")
             return []
-        
+
+        col = collection_name or self.collection_name
         doc_ids = ids if ids else [str(uuid.uuid4()) for _ in documents]
         try:
-            # Qdrant client has a synchronous add method. We can run it in a threadpool if needed,
-            # but for our scale, synchronous call is extremely fast.
             self.client.add(
-                collection_name=self.collection_name,
+                collection_name=col,
                 documents=documents,
                 metadata=metadatas,
                 ids=doc_ids
             )
             return doc_ids
         except Exception as e:
-            logger.error(f"Error adding documents to Qdrant: {str(e)}")
+            logger.error(f"Error adding documents to Qdrant ({col}): {str(e)}")
             return []
 
-    async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    async def search(self, query: str, limit: int = 5, collection_name: Optional[str] = None) -> List[Dict[str, Any]]:
         if not self.client:
             logger.warning("Qdrant client not initialized. Returning empty search results.")
             return []
-        
+
+        col = collection_name or self.collection_name
         try:
             results = self.client.query(
-                collection_name=self.collection_name,
+                collection_name=col,
                 query_text=query,
                 limit=limit
             )
-            
+
             hits = []
             for hit in results:
                 hits.append({
@@ -62,8 +62,18 @@ class RAGService:
                 })
             return hits
         except Exception as e:
-            logger.error(f"Error searching Qdrant: {str(e)}")
+            logger.error(f"Error searching Qdrant ({col}): {str(e)}")
             return []
+
+    def count_documents(self, collection_name: Optional[str] = None) -> int:
+        col = collection_name or self.collection_name
+        if not self.client:
+            return 0
+        try:
+            result = self.client.count(collection_name=col)
+            return result.count
+        except Exception:
+            return 0
 
     async def delete_document(self, doc_id: str):
         if not self.client:

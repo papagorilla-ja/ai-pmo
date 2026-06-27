@@ -60,6 +60,7 @@ export const useProjectStore = defineStore('project', {
     calendarHolidays: [],
     projectWbsTree: [],
     currentProjectId: null,
+    selectedTaskId: null,
     wbsTreeRevision: 0
   }),
   
@@ -292,11 +293,11 @@ export const useProjectStore = defineStore('project', {
       }
     },
     
-    async executeCommand(commandText) {
+    async executeCommand(commandText, screenContext = null) {
       try {
-        const response = await axios.post(`${API_BASE}/command/execute`, {
-          command: commandText
-        })
+        const payload = { command: commandText }
+        if (screenContext) payload.screen_context = screenContext
+        const response = await axios.post(`${API_BASE}/command/execute`, payload)
         await this.fetchTasks()
         await this.fetchStandupSummary()
         return response.data

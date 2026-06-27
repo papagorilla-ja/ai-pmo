@@ -113,11 +113,15 @@ const depsOf = (n) => (n.dependencies || []).map((d) => String(typeof d === 'str
 
 // Map a backend WBS node (with nested .children) to a Jordium task (recursive).
 const mapNode = (n) => {
+  const usePlanB = store.planBGhostActive &&
+    n.plan_b_end &&
+    n.plan_b_end !== n.planned_end
+
   const task = {
     id: String(n.id),
-    name: n.title,
-    startDate: fmt(n.planned_start),
-    endDate: fmt(n.planned_end),
+    name: usePlanB ? `${n.title} 🔄` : n.title,
+    startDate: fmt(usePlanB ? (n.plan_b_start || n.planned_start) : n.planned_start),
+    endDate: fmt(usePlanB ? n.plan_b_end : n.planned_end),
     progress: n.progress || 0,
     assignee: n.assignee_name || '',
     predecessor: depsOf(n)
@@ -142,15 +146,20 @@ const ganttTasks = computed(() => {
         endDate: fmt(ends.length ? new Date(Math.max(...ends)) : new Date()),
         progress: 0,
         collapsed: false,
-        children: ts.map((t) => ({
-          id: String(t.id),
-          name: t.title,
-          startDate: fmt(t.planned_start),
-          endDate: fmt(t.planned_end),
-          progress: t.progress || 0,
-          assignee: t.assignee_name || '',
-          predecessor: depsOf(t)
-        }))
+        children: ts.map((t) => {
+          const usePlanB = store.planBGhostActive &&
+            t.plan_b_end &&
+            t.plan_b_end !== t.planned_end
+          return {
+            id: String(t.id),
+            name: usePlanB ? `${t.title} 🔄` : t.title,
+            startDate: fmt(usePlanB ? (t.plan_b_start || t.planned_start) : t.planned_start),
+            endDate: fmt(usePlanB ? t.plan_b_end : t.planned_end),
+            progress: t.progress || 0,
+            assignee: t.assignee_name || '',
+            predecessor: depsOf(t)
+          }
+        })
       }
     })
   }

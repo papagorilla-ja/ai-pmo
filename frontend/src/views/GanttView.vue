@@ -82,6 +82,49 @@
 
           <!-- Sidebar for Hearing chat -->
           <v-col cols="12" md="4" v-if="selectedTaskId">
+            <!-- AI Plan Approval Card -->
+            <v-card v-if="showApprovePlan" class="glass-panel border-neon-glow pa-4 mb-3 text-white">
+              <v-card-title class="text-subtitle-2 font-weight-bold text-neon-blue d-flex align-center pb-2 border-bottom">
+                <v-icon start color="primary" size="18">mdi-robot-outline</v-icon>
+                AIプラン承認待ち
+              </v-card-title>
+              <v-card-text class="pt-3 pb-1">
+                <p class="text-caption text-grey mb-3">
+                  AIがサブタスクの実行計画を生成しました。承認するとAIワーカーが実行を開始します。
+                </p>
+                <div class="mb-2">
+                  <div
+                    v-for="sub in selectedTask.subtasks.filter(s => s.status === 'PENDING')"
+                    :key="sub.id"
+                    class="d-flex align-center gap-2 mb-1"
+                  >
+                    <v-icon size="14" color="warning">mdi-circle-outline</v-icon>
+                    <span class="text-caption">{{ sub.title }}</span>
+                  </div>
+                </div>
+              </v-card-text>
+              <v-card-actions class="pt-0">
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="grey"
+                  :disabled="approvePlanLoading"
+                  @click="store.rejectPlan(selectedTaskId)"
+                >拒否</v-btn>
+                <v-spacer></v-spacer>
+                <v-btn
+                  size="small"
+                  variant="flat"
+                  class="bg-neon-gradient text-white"
+                  :loading="approvePlanLoading"
+                  @click="handleApprovePlan"
+                >
+                  <v-icon start size="16">mdi-play-circle-outline</v-icon>
+                  GO（実行開始）
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+
             <HearingChat :task-id="selectedTaskId" />
           </v-col>
         </v-row>
@@ -326,6 +369,48 @@
                 </div>
                 
                 <GanttChart :is-portfolio="true" />
+              </v-card>
+
+              <!-- Portfolio KPI サマリー -->
+              <v-card class="glass-panel border-neon-glow pa-4">
+                <v-card-title class="text-subtitle-1 font-weight-bold text-white d-flex align-center pb-3">
+                  <v-icon start color="primary">mdi-gauge</v-icon>
+                  ポートフォリオ健康指標
+                </v-card-title>
+                <v-row>
+                  <v-col
+                    cols="12"
+                    sm="6"
+                    v-for="proj in store.portfolioProjects"
+                    :key="'kpi-' + proj.id"
+                  >
+                    <div class="d-flex align-center justify-between pa-3 bg-glass rounded-lg border-subtle">
+                      <div>
+                        <div class="text-caption text-grey mb-1 font-weight-bold text-truncate" style="max-width: 180px;">
+                          {{ proj.name }}
+                        </div>
+                        <div class="d-flex align-center gap-2 mt-1">
+                          <v-chip
+                            :color="portfolioKpi(proj).delayCount > 0 ? 'error' : 'success'"
+                            size="x-small"
+                            variant="flat"
+                          >
+                            {{ portfolioKpi(proj).delayCount > 0 ? `遅延 ${portfolioKpi(proj).delayCount}件` : '遅延なし' }}
+                          </v-chip>
+                          <span class="text-caption text-grey">完了率 {{ portfolioKpi(proj).doneRate }}%</span>
+                        </div>
+                      </div>
+                      <v-progress-circular
+                        :model-value="portfolioKpi(proj).doneRate"
+                        :size="48"
+                        :width="5"
+                        :color="portfolioKpi(proj).doneRate >= 80 ? 'success' : portfolioKpi(proj).doneRate >= 40 ? 'warning' : 'error'"
+                      >
+                        <span class="text-caption font-weight-bold text-white">{{ portfolioKpi(proj).doneRate }}%</span>
+                      </v-progress-circular>
+                    </div>
+                  </v-col>
+                </v-row>
               </v-card>
 
               <!-- Projects & Resource Allocations -->
@@ -1052,6 +1137,23 @@ const createDialog = ref(false)
 const projectCreateDialog = ref(false)
 const activeTab = ref('wbs')
 const errorMessage = ref('')
+const approvePlanLoading = ref(false)
+
+const selectedTask = computed(() => store.tasks.find(t => t.id === selectedTaskId.value))
+const showApprovePlan = computed(() => {
+  const t = selectedTask.value
+  return t && t.assignee_type === 'AI' && t.subtasks && t.subtasks.some(s => s.status === 'PENDING')
+})
+
+const handleApprovePlan = async () => {
+  if (!selectedTaskId.value) return
+  approvePlanLoading.value = true
+  try {
+    await store.approvePlan(selectedTaskId.value)
+  } finally {
+    approvePlanLoading.value = false
+  }
+}
 
 // Search & filter refs for Task List tab
 const searchFilter = ref('')
@@ -1645,11 +1747,25 @@ const handleApplyShift = async (conflict) => {
   }
 }
 
+const portfolioKpi = (proj) => {
+  const tasks = proj.tasks || []
+  if (!tasks.length) return { doneRate: 0, delayCount: 0 }
+  const doneCount = tasks.filter(t => t.status === 'DONE').length
+  const delayCount = tasks.filter(t => t.delay_days > 0).length
+  const doneRate = Math.round((doneCount / tasks.length) * 100)
+  return { doneRate, delayCount }
+}
+
 // Watchers for selected project dropdown
 watch(selectedProjectId, async (newId) => {
   if (newId) {
     await store.fetchProjectTree(newId)
   }
+})
+
+// Sync selected task to store so CommandPalette can inject it as screen context
+watch(selectedTaskId, (newId) => {
+  store.selectedTaskId = newId
 })
 
 watch(() => store.portfolioProjects, (val) => {

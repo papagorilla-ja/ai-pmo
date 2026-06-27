@@ -109,12 +109,11 @@ class GiteaService:
             system_prompt = (
                 "あなたはプロジェクト管理の教訓(Lessons-Learned)抽出AIです。"
                 "GitのPRの内容から今後のプロジェクトで活かせる教訓・注意点・ベストプラクティスを抽出してください。"
-                '出力は JSON 配列のみ: [{"title": "30字以内", "content": "200字以内"}]'
+                '出力は JSON 配列のみ: [{"title": "30字以内", "content": "200字以内", "mitigation_task": "50字以内の具体的な予防タスク名"}]'
                 "該当なければ空配列 []。解説不要、JSONのみ出力。"
             )
             raw = await llm_service.get_response(system_prompt, full_text, temperature=0.3)
 
-            # コードフェンス除去（planning_service._clean_json_string と同じ処理）
             cleaned = re.sub(r'^```(?:json)?\s*', '', raw.strip(), flags=re.MULTILINE)
             cleaned = re.sub(r'\s*```$', '', cleaned.strip(), flags=re.MULTILINE)
             lessons = json.loads(cleaned.strip())
@@ -125,14 +124,26 @@ class GiteaService:
             for lesson in lessons:
                 t = (lesson.get("title") or "").strip()
                 c = (lesson.get("content") or "").strip()
+                mt = (lesson.get("mitigation_task") or "類似トラブルの事前確認と対策立案").strip()
                 if not t or not c:
                     continue
                 documents.append(f"{t}\n{c}")
-                metadatas.append({"type": "gitea_pr", "title": t, "source": "gitea_pr"})
+                metadatas.append({
+                    "type": "gitea_pr",
+                    "title": t,
+                    "mitigation_task": mt,
+                    "source": "gitea_pr"
+                })
 
             if documents:
                 doc_ids = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"gitea_pr_{d[:60]}")) for d in documents]
+                # 一般ナレッジコレクションに登録
                 registered = await rag_service.add_documents(documents, metadatas, doc_ids)
+                # lessons_learned 専用コレクションにも登録
+                await rag_service.add_documents(
+                    documents, metadatas, doc_ids,
+                    collection_name=settings.QDRANT_LESSONS_COLLECTION_NAME
+                )
                 for i, doc_id in enumerate(registered):
                     existing = (await db.execute(
                         select(Knowledge).where(Knowledge.qdrant_id == doc_id)

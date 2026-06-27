@@ -21,6 +21,31 @@
           @keydown.enter="submit"
         ></v-text-field>
 
+        <!-- Screen context badge -->
+        <div v-if="store.currentProjectId || store.selectedTaskId" class="mb-3 d-flex align-center gap-2 flex-wrap">
+          <v-chip size="x-small" color="info" label prepend-icon="mdi-map-marker">
+            {{ SCREEN_LABELS[route.name] || route.name }}
+          </v-chip>
+          <v-chip
+            v-if="store.currentProjectId"
+            size="x-small"
+            color="primary"
+            label
+            prepend-icon="mdi-folder-outline"
+          >
+            {{ store.portfolioProjects.find(p => p.id === store.currentProjectId)?.name || store.currentProjectId }}
+          </v-chip>
+          <v-chip
+            v-if="store.selectedTaskId"
+            size="x-small"
+            color="secondary"
+            label
+            prepend-icon="mdi-checkbox-marked-outline"
+          >
+            {{ store.tasks.find(t => t.id === store.selectedTaskId)?.title || store.selectedTaskId }}
+          </v-chip>
+        </div>
+
         <!-- Command suggestions -->
         <div v-if="!executing && !responseMsg" class="mb-4">
           <div class="text-caption text-grey-darken-1 mb-2">利用可能なクイックコマンド</div>
@@ -57,6 +82,25 @@
           </div>
           <p class="text-body-2 text-white style-pre-wrap">{{ responseMsg }}</p>
         </div>
+
+        <!-- Repo selection chips (shown after SELECT_REPO action) -->
+        <div v-if="repoOptions.length > 0" class="mt-3">
+          <div class="text-caption text-grey-darken-1 mb-2">リポジトリを選択:</div>
+          <v-chip-group>
+            <v-chip
+              v-for="repo in repoOptions"
+              :key="repo.full_name"
+              size="small"
+              color="success"
+              variant="outlined"
+              class="mr-2 mb-2"
+              prepend-icon="mdi-source-repository"
+              @click="selectRepo(repo.full_name)"
+            >
+              {{ repo.full_name }}
+            </v-chip>
+          </v-chip-group>
+        </div>
       </v-card-text>
 
       <v-card-actions class="d-flex justify-end pt-2">
@@ -75,22 +119,78 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useProjectStore } from '../store/project'
 
 const store = useProjectStore()
+const route = useRoute()
 const visible = ref(false)
 const cmdText = ref('')
 const responseMsg = ref('')
 const executing = ref(false)
 const inputField = ref(null)
+const repoOptions = ref([])
 
-const suggestions = [
-  '@AI 遅延タスクの残工数をヒアリングして',
-  '@AI 夜間クロールを起動',
-  '@AI プランBを適用して',
-  'タスク一覧の進捗をチェックして'
-]
+const SCREEN_LABELS = {
+  Dashboard: 'ダッシュボード',
+  GanttView: 'ガントチャート',
+  KnowledgeView: 'ナレッジ管理',
+  ArtifactsView: '成果物管理',
+  AdminView: 'システム管理',
+}
+
+const suggestions = computed(() => {
+  const routeName = route.name
+  if (routeName === 'GanttView') {
+    const base = [
+      '@AI このスケジュールを最適化して',
+      '@AI 遅延タスクの残工数をヒアリングして',
+      '@AI プランBを適用して',
+      '@AI Giteaクロール',
+    ]
+    if (store.selectedTaskId) base.unshift('@AI このタスクをヒアリングして')
+    return base
+  }
+  if (routeName === 'Dashboard') {
+    return [
+      '@AI EVM分析の根拠を詳しく説明して',
+      '@AI 遅延タスクの残工数をヒアリングして',
+      'タスク一覧の進捗をチェックして',
+    ]
+  }
+  if (routeName === 'ArtifactsView') {
+    return [
+      '@AI この成果物のリスクを説明して',
+      'タスク一覧の進捗をチェックして',
+    ]
+  }
+  return [
+    '@AI 遅延タスクの残工数をヒアリングして',
+    '@AI 夜間クロールを起動',
+    '@AI Giteaクロール',
+    '@AI プランBを適用して',
+    'タスク一覧の進捗をチェックして',
+  ]
+})
+
+const buildScreenContext = () => {
+  const ctx = {
+    screen: route.name || 'Unknown',
+    screen_label: SCREEN_LABELS[route.name] || route.name || '不明',
+  }
+  if (store.currentProjectId) {
+    const proj = store.portfolioProjects.find(p => p.id === store.currentProjectId)
+    ctx.project_id = store.currentProjectId
+    ctx.project_name = proj?.name || null
+  }
+  if (store.selectedTaskId) {
+    const task = store.tasks.find(t => t.id === store.selectedTaskId)
+    ctx.task_id = store.selectedTaskId
+    ctx.task_title = task?.title || null
+  }
+  return ctx
+}
 
 const togglePalette = () => {
   visible.value = !visible.value
@@ -112,6 +212,7 @@ const selectSuggestion = (text) => {
 
 const close = () => {
   visible.value = false
+  repoOptions.value = []
 }
 
 const submit = async () => {
@@ -119,10 +220,14 @@ const submit = async () => {
   
   executing.value = true
   responseMsg.value = ''
+  repoOptions.value = []
   
   try {
-    const res = await store.executeCommand(cmdText.value)
-    if (res.success) {
+    const res = await store.executeCommand(cmdText.value, buildScreenContext())
+    if (res.action === 'SELECT_REPO') {
+      responseMsg.value = res.message
+      repoOptions.value = res.repos || []
+    } else if (res.success) {
       responseMsg.value = res.message
     } else {
       responseMsg.value = `エラー: ${res.message}`
@@ -132,6 +237,11 @@ const submit = async () => {
   } finally {
     executing.value = false
   }
+}
+
+const selectRepo = (fullName) => {
+  cmdText.value = `@AI Giteaクロール ${fullName}`
+  submit()
 }
 
 // Global key bindings
